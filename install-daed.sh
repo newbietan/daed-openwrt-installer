@@ -203,10 +203,10 @@ ROUTER_IP=$(uci -q get network.lan.ipaddr || echo "192.168.8.1")
 echo ""
 echo "============================================================"
 if pgrep -f "/usr/bin/daed" >/dev/null 2>&1; then
-    success "🎉 daed 服务已成功启动并正在运行！"
-    echo -e "▶ daed 网页控制台: ${GREEN}http://${ROUTER_IP}:2023${NC}"
-    echo -e "▶ OpenWrt LuCI 界面: ${GREEN}http://${ROUTER_IP}/cgi-bin/luci/admin/services/daed${NC}"
-    echo -e "▶ 运行日志查看命令: ${BLUE}cat /var/log/daed/daed.log${NC}"
+    success "daed 服务已成功启动并正在运行！"
+    echo -e "- daed 网页控制台: ${GREEN}http://${ROUTER_IP}:2023${NC}"
+    echo -e "- OpenWrt LuCI 界面: ${GREEN}http://${ROUTER_IP}/cgi-bin/luci/admin/services/daed${NC}"
+    echo -e "- 运行日志查看命令: ${BLUE}cat /var/log/daed/daed.log${NC}"
 else
     warn "daed 进程可能正在初始化中，请执行以下命令查看日志："
     echo "cat /var/log/daed/daed.log"

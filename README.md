@@ -9,7 +9,7 @@
 
 ---
 
-## 🌟 核心特性与解决的痛点
+## 核心特性与解决的痛点
 
 - **完美适配 OpenWrt 25+ 的 `apk-tools 3.0`**：针对新一代 OpenWrt 彻底废弃 `opkg` 的架构，自动化处理 APK 安装、解包与环境依赖。
 - **自动解决 `zoneinfo-asia` 缺失**：绕过官方软件源中缺少 `zoneinfo-asia` 导致的安装阻断。
@@ -20,7 +20,7 @@
 
 ---
 
-## 📦 支持平台与环境
+## 支持平台与环境
 
 - **测试路由器**：GL.iNet GL-MT3600BE
 - **系统固件**：OpenWrt 25.12.5 (r33051)
@@ -30,7 +30,7 @@
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 方式一：Git Clone 安装（推荐）
 
@@ -58,7 +58,7 @@ chmod +x install-daed.sh
 
 ---
 
-## 🖥 访问与管理
+## 访问与管理
 
 安装成功后，控制台会输出服务状态与访问地址：
 
@@ -71,7 +71,7 @@ chmod +x install-daed.sh
 
 ---
 
-## 📂 项目结构
+## 项目结构
 
 ```text
 daed-openwrt-installer/
@@ -90,7 +90,7 @@ daed-openwrt-installer/
 
 ---
 
-## 🛠 服务控制与排错命令
+## 服务控制与排错命令
 
 ```bash
 # 查看 daed 进程状态
@@ -108,7 +108,7 @@ tail -f /var/log/daed/daed.log
 
 ---
 
-## 📄 鸣谢与开源许可证
+## 鸣谢与开源许可证
 
 本项目采用 [MIT License](LICENSE) 开源。
 
