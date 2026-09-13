@@ -17,6 +17,9 @@
   - 官方源 `kmod-sched-bpf` 中的 `act_bpf.ko` 模块在联发科 Wi-Fi 7 (MT7988/Filogic) 内核中加载时会引发 **Kernel Panic 瞬间死机重启**。
   - 本工具深入跟踪 `daed` 启动逻辑，仅精准提取并加载安全的 **`cls_bpf.ko`（TC BPF 流量分类器）**，彻底避免系统崩溃与循环重启。
 - **一键开箱即用**：自动配置 eBPF BTF 符号软链接、配置 GeoIP/GeoSite 规则数据包、初始化 LuCI 中文语言与索引缓存，自动配置开机自启。
+- **根除面板重载死机断网**：自动关闭冲突的 MediaTek PPE 硬件加速 (Flow Offloading)，解除 `memlock` 锁定内存限制并设置 `GOMEMLIMIT` 防 OOM，彻底解决面板点击重载后路由器假死断网痛点。
+- **释放 Hysteria 2 / QUIC 极限带宽**：自动调优 Linux 内核 UDP Socket 缓冲区至 16MB，消除跨国高延时链路下的 BDP 丢包瓶颈。
+- **配套一键调优修复脚本**：提供独立的 `optimize-daed.sh`，支持在已安装环境中随时一键修复与深度优化。
 
 ---
 
@@ -75,7 +78,8 @@ chmod +x install-daed.sh
 
 ```text
 daed-openwrt-installer/
-├── install-daed.sh              # 一键自动安装与部署脚本
+├── install-daed.sh              # 一键自动安装、部署与环境优化脚本
+├── optimize-daed.sh             # 独立运行的一键系统调优与排障修复工具
 ├── DAED_OPENWRT_INSTALL_GUIDE.md # 深度技术排障与手动安装全过程文档
 ├── README.md                    # 项目说明
 ├── LICENSE                      # 开源许可协议 (MIT)
@@ -87,6 +91,25 @@ daed-openwrt-installer/
     ├── v2ray-geosite-*.apk
     └── vmlinux-btf-6.12.91.apk
 ```
+
+---
+
+## 独立系统调优工具 (optimize-daed.sh)
+
+若你的路由器已经安装了 daed，但在使用中遇到**面板修改重载后死机**或 **Hy2 节点速度极慢**：
+
+```bash
+chmod +x optimize-daed.sh
+./optimize-daed.sh
+```
+
+该工具会自动：
+
+1. 关闭冲突的 Flow Offloading（硬件流转发加速），根除重载死机
+2. 扩充内核 UDP 接收/发送缓冲区至 16MB，突破 QUIC 吞吐瓶颈
+3. 解除锁定内存限制 (`memlock unlimited`) 并配置 Go 内存保护
+4. 屏蔽系统与 DNS AAAA 解析，避免跨协议栈探测震荡
+5. 自动优化 `/etc/daed/wing.db` 数据库（解除限速与剔除 IPv6 探测）
 
 ---
 

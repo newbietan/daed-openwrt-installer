@@ -168,9 +168,62 @@ if [ -d "/usr/share/v2ray" ]; then
     ln -sf /usr/share/v2ray /usr/share/daed 2>/dev/null || true
 fi
 
-# 确保 daed 能找到规则库目录
-if [ -f "/etc/init.d/daed" ] && ! grep -q "DAE_LOCATION_ASSET" /etc/init.d/daed; then
-    sed -i '/procd_open_instance/a\	procd_set_param env DAE_LOCATION_ASSET="/usr/share/v2ray"' /etc/init.d/daed
+# 确保 daed 能找到规则库目录并具备防 OOM 内存保护与锁定内存权限
+if [ -f "/etc/init.d/daed" ]; then
+    cat <<'EOF' >/etc/init.d/daed
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2023 Tianling Shen <cnsztl@immortalwrt.org>
+
+USE_PROCD=1
+START=99
+
+CONF="daed"
+PROG="/usr/bin/daed"
+LOG="/var/log/daed/daed.log"
+DAENETNS="/run/netns/daens"
+
+start_service() {
+	config_load "$CONF"
+
+	local enabled
+	config_get_bool enabled "config" "enabled" "0"
+	[ "$enabled" -eq "1" ] || return 1
+
+	local listen_addr log_maxbackups log_maxsize
+	config_get listen_addr "config" "listen_addr" "0.0.0.0:2023"
+	config_get log_maxbackups "config" "log_maxbackups" "1"
+	config_get log_maxsize "config" "log_maxsize" "5"
+
+	procd_open_instance "$CONF"
+	procd_set_param env DAE_LOCATION_ASSET="/usr/share/v2ray"
+	procd_set_param env GOMEMLIMIT="200MiB"
+	procd_set_param env GODEBUG="madvdontneed=1"
+	procd_set_param command "$PROG" run
+	procd_append_param command --config "/etc/daed/"
+	procd_append_param command --listen "$listen_addr"
+	procd_append_param command --logfile "$LOG"
+	procd_append_param command --logfile-maxbackups "$log_maxbackups"
+	procd_append_param command --logfile-maxsize "$log_maxsize"
+
+	procd_set_param limits core="unlimited"
+	procd_set_param limits memlock="unlimited"
+	procd_set_param limits nofile="1000000 1000000"
+	procd_set_param respawn
+	procd_set_param stderr 1
+
+	procd_close_instance
+}
+
+stop_service() {
+	rm -f "$LOG"
+	[ -f "$DAENETNS" ] && umount "$DAENETNS"
+}
+
+service_triggers() {
+	procd_add_reload_trigger "$CONF"
+}
+EOF
+    chmod 755 /etc/init.d/daed
 fi
 
 # 7. LuCI 语言包与缓存刷新
@@ -184,7 +237,43 @@ rm -f /tmp/luci-indexcache.*
 rm -rf /tmp/luci-modulecache/
 /etc/init.d/rpcd reload >/dev/null 2>&1 || /etc/init.d/rpcd restart >/dev/null 2>&1 || true
 
-# 8. 启用与启动服务
+# 8. 系统深度调优（防火墙流加速冲突规避、UDP缓冲区优化、IPv6纯净防护）
+info "正在执行系统运行环境深度优化与防死机调优..."
+# A. 关闭硬件与软件流量分流 (Flow Offloading)，杜绝 MediaTek PPE 与 eBPF 冲突死机
+if [ "$(uci -q get firewall.@defaults[0].flow_offloading)" != "0" ] || [ "$(uci -q get firewall.@defaults[0].flow_offloading_hw)" != "0" ]; then
+    uci set firewall.@defaults[0].flow_offloading='0'
+    uci set firewall.@defaults[0].flow_offloading_hw='0'
+    uci -q delete firewall.passwall2 || true
+    uci commit firewall
+    /etc/init.d/firewall reload >/dev/null 2>&1 || true
+    success "已关闭 Flow Offloading 硬件/软件流加速，保障 eBPF 重载稳定不卡死。"
+fi
+
+# B. 优化内核 UDP Socket 缓冲区与队列（16MB，软中断队列扩至 10000，消除跨国高延时 Hysteria 2 / QUIC BDP 丢包瓶颈）
+cat <<'EOF' >/etc/sysctl.d/99-dae-udp.conf
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.rmem_default = 1048576
+net.core.wmem_default = 1048576
+net.core.optmem_max = 2048576
+net.core.netdev_max_backlog = 10000
+net.ipv4.udp_rmem_min = 16384
+net.ipv4.udp_wmem_min = 16384
+EOF
+sysctl -p /etc/sysctl.d/99-dae-udp.conf >/dev/null 2>&1 || true
+success "内核 UDP Socket 缓冲区已扩大至 16MB，软中断队列扩至 10000。"
+
+# C. 优化 DNS 过滤 AAAA 与上游防污染分流，杜绝境外域名被光猫投毒
+uci set dhcp.@dnsmasq[0].filter_aaaa='1'
+uci set dhcp.@dnsmasq[0].noresolv='1'
+uci -q delete dhcp.@dnsmasq[0].server || true
+uci add_list dhcp.@dnsmasq[0].server='8.8.8.8'
+uci add_list dhcp.@dnsmasq[0].server='223.5.5.5'
+uci commit dhcp
+/etc/init.d/dnsmasq restart >/dev/null 2>&1 || true
+success "dnsmasq 已配置 filter_aaaa 过滤与防污染上游分流。"
+
+# 9. 启用与启动服务
 info "启用 daed 服务并设置开机自启..."
 uci set daed.config.enabled='1'
 uci commit daed
@@ -197,7 +286,7 @@ uci commit daed
 
 sleep 2
 
-# 9. 状态验证
+# 10. 状态验证
 ROUTER_IP=$(uci -q get network.lan.ipaddr || echo "192.168.8.1")
 
 echo ""
@@ -206,6 +295,7 @@ if pgrep -f "/usr/bin/daed" >/dev/null 2>&1; then
     success "daed 服务已成功启动并正在运行！"
     echo -e "- daed 网页控制台: ${GREEN}http://${ROUTER_IP}:2023${NC}"
     echo -e "- OpenWrt LuCI 界面: ${GREEN}http://${ROUTER_IP}/cgi-bin/luci/admin/services/daed${NC}"
+    echo -e "- 深度优化工具: ${BLUE}${SCRIPT_DIR}/optimize-daed.sh${NC}"
     echo -e "- 运行日志查看命令: ${BLUE}cat /var/log/daed/daed.log${NC}"
 else
     warn "daed 进程可能正在初始化中，请执行以下命令查看日志："
